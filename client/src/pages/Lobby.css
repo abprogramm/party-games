@@ -1,0 +1,90 @@
+/* client/src/pages/Lobby.css */
+
+/* Ensure that the container takes up the full viewport height */
+.lobby-container {
+  display: flex;
+  justify-content: center;  /* Centers horizontally */
+  align-items: center;      /* Centers vertically */
+  height: 100vh;            /* Full viewport height */
+  background: #f4f7fc;      /* Background color */
+  padding: 0 20px;          /* Padding for responsive design */
+}
+
+/* The lobby container itself */
+.lobby {
+  text-align: center;  /* Center text inside this container */
+  background: white;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  max-width: 100%;      /* Ensure it can adjust to the width */
+  width: 100%;
+  max-width: 400px;     /* Limit max width */
+}
+
+/* Style for title */
+.lobby-title {
+  font-size: 2rem;
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: #4a90e2;
+}
+
+/* Input field style */
+.input-field {
+  width: 80%;
+  padding: 10px;
+  margin: 10px;
+  border: 2px solid #ccc;
+  border-radius: 5px;
+  font-size: 1rem;
+}
+
+/* Group buttons and center them */
+.button-group {
+  display: flex;
+  justify-content: space-around;
+  margin-top: 10px;
+}
+
+/* Style for buttons */
+.button {
+  background-color: #4a90e2;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s;
+}
+
+.button:hover {
+  background-color: #357ab7;
+}
+
+/* Room information styling */
+.room-info {
+  margin-top: 20px;
+  font-size: 1.1rem;
+}
+
+/* Game mode selection styling */
+.select-mode {
+  margin-top: 20px;
+}
+
+.select-mode button {
+  margin: 10px;
+}
+
+/* Message styling */
+.messages {
+  margin-top: 20px;
+  font-size: 1rem;
+  color: #333;
+}
+
+.messages p {
+  margin: 5px 0;
+}
