@@ -167,6 +167,10 @@ button:disabled { cursor: not-allowed; background-color: #ccc !important; color:
 .status-value { display: block; font-size: 1.15rem; font-weight: 600; color: var(--dark-text); line-height: 1.2; }
 .status-item.phase .status-value { color: var(--primary-color); }
 
+/* Category Display */
+.game-category-display { text-align: center; font-size: 1.1rem; color: var(--secondary-color); margin-top: -10px; margin-bottom: 20px; }
+.game-category-display strong { color: var(--dark-text); font-weight: 600; }
+
 /* Final Role Info Box */
 .role-info-box { border-radius: var(--border-radius); padding: 10px 0; margin: 15px 0 20px 0; text-align: center; background-color: var(--light-bg); border: 1px solid var(--border-color); }
 .role-display { font-size: 1.8rem; font-weight: 700; margin-bottom: 5px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 5px; line-height: 1.3; }
@@ -198,10 +202,24 @@ button:disabled { cursor: not-allowed; background-color: #ccc !important; color:
 .vote-status.waiting { color: var(--secondary-color); background-color: #f8f9fa; }
 .has-voted .player-name-area { opacity: 0.7; }
 
-/* --- Voting Area --- */
-.voting-area { margin-top: 30px; padding: 25px; background-color: var(--light-bg); border: 1px solid var(--border-color); border-radius: var(--border-radius); text-align: left; }
+/* --- Intermediate Round End Vote Area --- */
+.round-end-vote-area { border-top: 2px dashed var(--primary-color); margin-top: 30px; padding-top: 25px; background-color: var(--light-bg); padding: 25px; border: 1px solid var(--border-color); border-radius: var(--border-radius); text-align: left; }
+.round-end-vote-area h4 { color: var(--primary-color); text-align: center; margin-top: 0; margin-bottom: 10px; }
+.round-end-vote-area .info-text { text-align: center; margin-bottom: 20px; }
+.round-end-options { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
+.round-end-options .vote-btn { flex-grow: 1; max-width: 280px; }
+.round-end-options .vote-btn.next-round { background-color: var(--info-color); border-bottom-color: #117a8b; }
+.round-end-options .vote-btn.next-round:hover:not(:disabled):not(.selected) { background-color: #4fc3f7; }
+.round-end-options .vote-btn.next-round.selected { background-color: var(--info-color); border-color: #117a8b; border-bottom-color: #106c7c;}
+.round-end-options .vote-btn.vote-now { background-color: var(--orange-color); border-bottom-color: #e68a00;}
+.round-end-options .vote-btn.vote-now:hover:not(:disabled):not(.selected) { background-color: #ffab40; }
+.round-end-options .vote-btn.vote-now.selected { background-color: var(--orange-color); border-color: #e68a00; border-bottom-color: #cc7a00;}
+
+
+/* --- Voting Area (Final Impostor Vote) --- */
+.voting-area:not(.round-end-vote-area) { margin-top: 30px; padding: 25px; background-color: var(--light-bg); border: 1px solid var(--border-color); border-radius: var(--border-radius); text-align: left; }
 .voting-area h4 { margin-top: 0; margin-bottom: 20px; text-align: center; }
-.vote-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.vote-options:not(.round-end-options) { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .vote-btn { font-size: 0.95rem; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: var(--border-radius); cursor: pointer; transition: all 0.15s ease-in-out; font-family: 'Poppins', sans-serif; font-weight: 500; margin: 3px; letter-spacing: 0.5px; position: relative; box-shadow: var(--button-shadow); border-bottom-width: 3px; background-color: #fff; color: var(--dark-text); border-bottom-color: rgba(0,0,0,0.2); text-align: center; }
 .vote-btn:hover:not(:disabled):not(.selected) { background-color: var(--medium-bg); transform: translateY(-2px); box-shadow: var(--box-shadow-hover), var(--button-shadow); }
 .vote-btn:active:not(:disabled):not(.selected) { transform: translateY(1px); box-shadow: var(--button-shadow-active); border-bottom-width: 2px; filter: brightness(0.98); }
