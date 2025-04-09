@@ -110,6 +110,14 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
             </div>
             {/* --- End Redesigned Status --- */}
 
+            {/* --- Display Category (Visible to All) --- */}
+            {gameState?.category && !isRevealPhase && ( // Show category during game, hide during reveal
+                 <p className="game-category-display">
+                     Category: <strong>{gameState.category}</strong>
+                 </p>
+            )}
+            {/* --- End Category Display --- */}
+
 
             {/* --- Restructured Role Info Display --- */}
             <div className="role-info-box">

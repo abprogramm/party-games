@@ -177,6 +177,7 @@ button:disabled { cursor: not-allowed; background-color: #ccc !important; color:
 .role-word { font-size: 1rem; color: var(--secondary-color); margin-top: 10px !important; }
 .role-word strong { color: var(--success-color); background-color: transparent; padding: 0; font-weight: 600; }
 .assigning-role-text { font-style: italic; color: var(--secondary-color); font-size: 1.1rem; }
+/* End Final Role Info Box */
 
 .highlight-impostor { color: var(--danger-color); font-weight: 700; text-transform: uppercase; background-color: #f8d7da; padding: 3px 6px; border-radius: 4px; }
 .highlight-word { color: var(--success-color); font-weight: 700; background-color: #d4edda; padding: 3px 6px; border-radius: 4px; }
