@@ -83,7 +83,7 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
             {/* --- Intermediate Round End Voting UI --- */}
             {isRoundEndVotePhase && !isRevealPhase && (
                 <div className="round-end-vote-area voting-area">
-                    <h4>Round {gameState.currentRound -1} Over! Next Step?</h4> {/* Show completed round */}
+                    <h4>Round {gameState.currentRound} complete!</h4> {/* Show completed round */}
                     <p className="info-text">Vote to proceed to the next clue round or start the final vote now.</p>
                     <div className="vote-options round-end-options">
                         <button type="button" onClick={() => handleRoundEndVoteSubmit('next_round')} className={`vote-btn next-round ${myRoundEndVote === 'next_round' ? 'selected' : ''}`} disabled={!!myRoundEndVote} > Next Clue Round ({gameState.currentRound}/{IMPOSTOR_ROUNDS}) </button>
