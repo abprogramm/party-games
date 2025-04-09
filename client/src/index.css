@@ -177,7 +177,6 @@ button:disabled { cursor: not-allowed; background-color: #ccc !important; color:
 .role-word { font-size: 1rem; color: var(--secondary-color); margin-top: 10px !important; }
 .role-word strong { color: var(--success-color); background-color: transparent; padding: 0; font-weight: 600; }
 .assigning-role-text { font-style: italic; color: var(--secondary-color); font-size: 1.1rem; }
-/* End Final Role Info Box */
 
 .highlight-impostor { color: var(--danger-color); font-weight: 700; text-transform: uppercase; background-color: #f8d7da; padding: 3px 6px; border-radius: 4px; }
 .highlight-word { color: var(--success-color); font-weight: 700; background-color: #d4edda; padding: 3px 6px; border-radius: 4px; }
@@ -213,8 +212,9 @@ button:disabled { cursor: not-allowed; background-color: #ccc !important; color:
 
 /* --- Reveal Area --- */
 .reveal-area { margin-top: 30px; padding: 30px; background-color: #fff; border: 1px solid var(--border-color); border-radius: 12px; text-align: center; box-shadow: var(--box-shadow); position: relative; overflow: hidden; }
-.reveal-area h4 { margin-top: 0; color: var(--primary-color); text-align: center; font-size: 1.5rem; margin-bottom: 20px; }
-.reveal-area p { margin: 12px 0; font-size: 1.1rem; text-align: center; line-height: 1.7; }
+.reveal-area h4 { margin-top: 0; color: var(--primary-color); text-align: center; font-size: 1.5rem; margin-bottom: 15px; }
+.reveal-area p { margin: 10px 0; font-size: 1.1rem; text-align: center; line-height: 1.6; }
+.reveal-num-impostors { font-style: italic; color: var(--secondary-color); font-size: 0.95rem; margin-bottom: 15px !important; }
 .reveal-area .highlight-impostor { padding: 2px 5px; background-color: #f8d7da; border-radius: 4px; }
 .role-reveal { font-weight: bold; margin-left: 5px; font-size: 0.9em; text-transform: uppercase; }
 .win-lose-message { font-size: 3.5rem; font-weight: 700; margin: 15px 0 25px 0; line-height: 1.1; }

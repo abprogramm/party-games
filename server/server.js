@@ -2,7 +2,6 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
-// Import the categories object instead of the flat list
 const categories = require('./words'); // Ensure words.js is in the SAME directory
 
 // --- Configuration ---
@@ -11,7 +10,9 @@ const PORT = process.env.PORT || 3001;
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 12;
 const IMPOSTOR_ROUNDS = 3; // Number of clue rounds
-const COUNTDOWN_DURATION = 5000; // 5 seconds (This was added later, but including for context)
+const COUNTDOWN_DURATION = 5000; // 5 seconds in milliseconds for countdown
+const MIN_PLAYERS_FOR_TWO_IMPOSTORS = 5; // Minimum players needed for a *chance* of 2 impostors
+const TWO_IMPOSTOR_CHANCE = 0.25; // 25% chance if enough players
 // ---
 
 const app = express();
@@ -37,24 +38,52 @@ function shuffleArray(array) {
   return array;
 }
 
-// --- Vote Calculation Helper ---
+// --- Vote Calculation Helper (UPDATED FOR MULTIPLE IMPOSTORS) ---
 function calculateVoteResults(room) {
-    if (!room?.gameState?.votes) return null;
-    const votes = room.gameState.votes; const voteCounts = {}; let maxVotes = 0; const mostVotedNicknames = [];
-    for (const voter in votes) { const votedFor = votes[voter]; voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1; }
-    for (const nickname in voteCounts) { if (voteCounts[nickname] > maxVotes) { maxVotes = voteCounts[nickname]; } }
-    for (const nickname in voteCounts) { if (voteCounts[nickname] === maxVotes) { mostVotedNicknames.push(nickname); } }
-    const impostorNickname = room.gameState.impostorNickname;
-    const impostorWasCaught = mostVotedNicknames.length === 1 && mostVotedNicknames[0] === impostorNickname;
-    const winner = impostorWasCaught ? 'players' : 'impostor';
-    return { voteCounts, mostVotedNicknames, impostorNickname, impostorWasCaught, winner };
+    if (!room?.gameState?.votes || !room?.gameState?.impostorNicknames) return null;
+
+    const votes = room.gameState.votes;
+    const impostorNicknames = room.gameState.impostorNicknames; // Now an array
+    const voteCounts = {};
+    let maxVotes = 0;
+    const mostVotedNicknames = [];
+
+    // Count votes
+    for (const voter in votes) {
+        const votedFor = votes[voter];
+        voteCounts[votedFor] = (voteCounts[votedFor] || 0) + 1;
+    }
+
+    // Find max vote count
+    for (const nickname in voteCounts) {
+        if (voteCounts[nickname] > maxVotes) { maxVotes = voteCounts[nickname]; }
+    }
+
+    // Find all players with max votes
+    for (const nickname in voteCounts) {
+        if (voteCounts[nickname] === maxVotes) { mostVotedNicknames.push(nickname); }
+    }
+
+    // --- Determine if an impostor was caught ---
+    // Caught only if exactly ONE player received the most votes AND that player IS an impostor.
+    const impostorWasCaught = mostVotedNicknames.length === 1 && impostorNicknames.includes(mostVotedNicknames[0]);
+
+    const winner = impostorWasCaught ? 'players' : 'impostor'; // Players win if ANY impostor is caught this way
+
+    return {
+        voteCounts,          // { player1: 2, player2: 1, ... }
+        mostVotedNicknames,  // ['player1'] or ['player1', 'player2'] in case of tie
+        impostorNicknames, // Return the array of impostors
+        impostorWasCaught,   // boolean
+        winner               // 'players' or 'impostor'
+    };
 }
 
 
-// --- Impostor Game Logic (UPDATED FOR CATEGORIES) ---
+// --- Impostor Game Logic (UPDATED FOR MULTIPLE IMPOSTORS) ---
 function startImpostorGame(roomCode, room) {
     if (!room || room.users.length < MIN_PLAYERS) {
-        console.log(`[${roomCode}] Invalid start`);
+        console.log(`[${roomCode}] Cannot start impostor, invalid room or player count.`);
         // Optionally emit an error back to the admin who tried to start
         const adminUser = room?.users.find(u => u.isAdmin);
         if (adminUser) {
@@ -64,9 +93,19 @@ function startImpostorGame(roomCode, room) {
         return;
     }
 
-    const players = room.users;
-    const impostorIndex = Math.floor(Math.random() * players.length);
-    const impostor = players[impostorIndex];
+    const players = [...room.users]; // Create a mutable copy
+    shuffleArray(players); // Shuffle players to randomize impostor selection
+
+    // --- Determine Number of Impostors ---
+    let numberOfImpostors = 1;
+    if (players.length >= MIN_PLAYERS_FOR_TWO_IMPOSTORS && Math.random() < TWO_IMPOSTOR_CHANCE) {
+        numberOfImpostors = 2;
+    }
+    // Select impostors from the start of the shuffled list
+    const impostors = players.slice(0, numberOfImpostors);
+    const impostorNicknames = impostors.map(p => p.nickname); // Array of impostor nicknames
+    // --- End Impostor Selection ---
+
 
     // --- Select Category and Word ---
     const categoryNames = Object.keys(categories);
@@ -84,12 +123,11 @@ function startImpostorGame(roomCode, room) {
     const initialClues = {};
     players.forEach(p => { initialClues[p.nickname] = []; }); // Array to hold clues per round
 
-    // --- Update Game State with Category ---
+    // --- Update Game State ---
     room.gameState = {
         mode: 'impostor',
-        // Removed word from global state
         category: randomCategoryName, // Store the category name
-        impostorNickname: impostor.nickname,
+        impostorNicknames: impostorNicknames, // Store array of impostor nicknames
         clues: initialClues, // { nickname: [clueR1, clueR2, clueR3] }
         votes: {}, // { voterNickname: votedNickname }
         results: null, // To store vote results later
@@ -99,18 +137,19 @@ function startImpostorGame(roomCode, room) {
         currentTurnIndex: 0,
         currentTurnNickname: shuffledTurnOrder[0],
     };
-    console.log(`[${roomCode}] Impostor Started. Category: ${randomCategoryName}, Impostor: ${impostor.nickname}, Round: 1, Turn: ${room.gameState.currentTurnNickname}`);
+    console.log(`[${roomCode}] Impostor Started. Impostors (${numberOfImpostors}): ${impostorNicknames.join(', ')}, Category: ${randomCategoryName}, Round: 1, Turn: ${room.gameState.currentTurnNickname}`);
 
     // --- Assign roles individually (send category to all, word only to innocent) ---
     players.forEach(player => {
         const socket = io.sockets.sockets.get(player.socketId);
         if (socket) {
-            const isImpostor = player.socketId === impostor.socketId;
+            // Check if player's nickname is in the impostor list
+            const isImpostor = impostorNicknames.includes(player.nickname);
             socket.emit('game_role_assigned', {
                 role: isImpostor ? 'impostor' : 'innocent', // Use innocent consistently
                 category: randomCategoryName,               // Send category to EVERYONE
                 word: isImpostor ? null : word,             // Send word ONLY to innocents
-                message: isImpostor ? 'You are the Impostor! Try to guess the word from the category and clues.' : null
+                message: isImpostor ? 'You are an Impostor! Submit clues to blend in.' : null // Adjusted message
             });
         }
     });
@@ -122,11 +161,11 @@ function startImpostorGame(roomCode, room) {
         mode: room.gameState.mode,
         phase: room.gameState.phase,
         category: room.gameState.category, // Send category
-        players: room.users.map(u => ({nickname: u.nickname, isAdmin: u.isAdmin})),
+        players: room.users.map(u => ({nickname: u.nickname, isAdmin: u.isAdmin})), // Send simple player list
         currentTurnNickname: room.gameState.currentTurnNickname,
         clues: room.gameState.clues,
         currentRound: room.gameState.currentRound, // Send current round
-        // Do not send turnOrder or full clues map if not needed initially by all
+        // DO NOT send impostorNicknames here!
     });
 }
 
@@ -157,7 +196,7 @@ io.on('connection', (socket) => {
     socketIdToRoom.set(socket.id, roomCode);
     socket.join(roomCode);
     console.log(`Room ${roomCode} created by ${nickname} (${socket.id})`);
-    console.log(`[Server] Emitting 'room_created' to socket ${socket.id} for room ${roomCode}`); // Keep this log
+    console.log(`[Server] Emitting 'room_created' to socket ${socket.id} for room ${roomCode}`);
     socket.emit('room_created', {
         roomCode,
         users: activeRooms.get(roomCode).users,
@@ -205,13 +244,15 @@ io.on('connection', (socket) => {
       if (!room || !user || !room.gameState || room.gameState.mode !== 'impostor') return socket.emit('error', { message: 'Not in impostor game.' });
       const currentRound = room.gameState.currentRound; if (room.gameState.phase !== `clue_giving_round_${currentRound}`) return socket.emit('error', { message: 'Not clue giving phase.' });
       if (user.nickname !== room.gameState.currentTurnNickname) return socket.emit('error', { message: 'Not your turn.' });
-      if (room.gameState.clues[user.nickname]?.[currentRound - 1] !== undefined) return socket.emit('error', { message: `Already submitted clue for round ${currentRound}.` });
+      if (room.gameState.clues[user.nickname]?.[currentRound - 1] !== undefined) return socket.emit('error', { message: `Already submitted for round ${currentRound}.` });
       if (!clue || clue.trim().length === 0 || clue.length > 50) return socket.emit('error', { message: 'Invalid clue (1-50 chars).' });
+
       const sanitizedClue = clue.trim(); if (!room.gameState.clues[user.nickname]) room.gameState.clues[user.nickname] = [];
       room.gameState.clues[user.nickname][currentRound - 1] = sanitizedClue; console.log(`[Room ${roomCode}] R${currentRound} Clue from ${user.nickname}: ${sanitizedClue}`);
       room.gameState.currentTurnIndex++; const nextTurnIndex = room.gameState.currentTurnIndex; const turnOrder = room.gameState.turnOrder; const totalPlayers = room.users.length;
       if (nextTurnIndex >= totalPlayers) { const nextRound = currentRound + 1; if (nextRound > IMPOSTOR_ROUNDS) { console.log(`[Room ${roomCode}] All ${IMPOSTOR_ROUNDS} rounds complete. Moving to voting.`); room.gameState.phase = 'voting'; room.gameState.currentTurnIndex = 0; room.gameState.currentTurnNickname = null; room.gameState.currentRound = 0; } else { console.log(`[Room ${roomCode}] Round ${currentRound} complete. Starting Round ${nextRound}.`); room.gameState.phase = `clue_giving_round_${nextRound}`; room.gameState.currentRound = nextRound; room.gameState.currentTurnIndex = 0; room.gameState.currentTurnNickname = turnOrder[0]; } }
       else { room.gameState.currentTurnNickname = turnOrder[nextTurnIndex]; }
+      // Send *full* state update after clue/turn advance
       io.to(roomCode).emit('game_state_update', { ...room.gameState, word: null, results: null, players: room.users.map(u => ({nickname: u.nickname, isAdmin: u.isAdmin})) });
   });
 
@@ -222,8 +263,13 @@ io.on('connection', (socket) => {
       if (!room.users.some(p => p.nickname === votedNickname)) return socket.emit('error', { message: 'Invalid vote target.' });
       room.gameState.votes[voterNickname] = votedNickname; console.log(`[Room ${roomCode}] Vote: ${voterNickname} -> ${votedNickname}`);
       const expectedVotes = room.users.length; const currentVotes = Object.keys(room.gameState.votes).length; console.log(`[Room ${roomCode}] Votes: ${currentVotes}/${expectedVotes}`);
-      if (currentVotes >= expectedVotes) { console.log(`[Room ${roomCode}] All votes in. Calculating results.`); const results = calculateVoteResults(room); room.gameState.results = results; room.gameState.phase = 'reveal'; io.to(roomCode).emit('game_state_update', { ...room.gameState, word: null, players: room.users.map(u => ({nickname: u.nickname, isAdmin: u.isAdmin})) }); console.log(`[Room ${roomCode}] Results calculated. Impostor Caught: ${results?.impostorWasCaught}, Winner: ${results?.winner}`); }
-      else { io.to(roomCode).emit('game_state_update', { phase: 'voting', votes: room.gameState.votes }); }
+      if (currentVotes >= expectedVotes) { console.log(`[Room ${roomCode}] All votes in. Calculating results.`);
+          const results = calculateVoteResults(room); // Uses updated helper
+          room.gameState.results = results; room.gameState.phase = 'reveal';
+          // Send final state including results (which now contains impostorNicknames array)
+          io.to(roomCode).emit('game_state_update', { ...room.gameState, word: null, players: room.users.map(u => ({nickname: u.nickname, isAdmin: u.isAdmin})) });
+          console.log(`[Room ${roomCode}] Results: Impostors: ${results?.impostorNicknames.join(', ')}, Caught: ${results?.impostorWasCaught}, Winner: ${results?.winner}`);
+      } else { io.to(roomCode).emit('game_state_update', { phase: 'voting', votes: room.gameState.votes }); } // Send partial update
   });
 
   socket.on('request_return_to_lobby', ({ roomCode }) => {

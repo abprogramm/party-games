@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import confetti from 'canvas-confetti';
+import confetti from 'canvas-confetti'; // Import confetti library
 
 // Define IMPOSTOR_ROUNDS constant
 const IMPOSTOR_ROUNDS = 3;
 
-function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, playerRole, onLeave, onReturnToLobby }) {
+// Accept playSound and audio refs as props (Even if sounds removed from App.jsx for now)
+function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, playerRole, onLeave, onReturnToLobby, playSound, notificationAudioRef, errorAudioRef }) {
 
     const [clueInput, setClueInput] = useState('');
     const [selectedVote, setSelectedVote] = useState('');
@@ -17,6 +18,7 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
     const myClues = gameState?.clues?.[nickname] || [];
     const cluePhaseActive = gameState?.phase?.startsWith('clue_giving');
     const alreadySubmittedThisRound = cluePhaseActive && currentRound > 0 && myClues[currentRound - 1] !== undefined;
+    // Impostors can also submit clues now
     const canSubmitClue = myTurn && cluePhaseActive && !alreadySubmittedThisRound;
     const myVote = gameState?.votes?.[nickname];
     const isVotingPhase = gameState?.phase === 'voting';
@@ -27,20 +29,24 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
     useEffect(() => {
         if (isRevealPhase && results && !confettiFiredRef.current) {
             const amImpostor = playerRole?.role === 'impostor';
+            // Correct win condition check
             const didIWin = (results.winner === 'impostor' && amImpostor) || (results.winner === 'players' && !amImpostor);
+
             if (didIWin) {
                 console.log("Player won! Firing confetti.");
                 confettiFiredRef.current = true;
                 confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } });
                 setTimeout(() => confetti({ particleCount: 100, angle: 60, spread: 55, origin: { x: 0 } }), 250);
                 setTimeout(() => confetti({ particleCount: 100, angle: 120, spread: 55, origin: { x: 1 } }), 400);
-                // Play win sound here if added back
+                // Play win sound here if sounds added back and refs passed
+                // playSound(winSoundRef);
             } else {
-                 // Play lose sound here if added back
+                 // Play lose sound here if sounds added back and refs passed
+                 // playSound(loseSoundRef);
             }
         }
         if (!isRevealPhase) { confettiFiredRef.current = false; }
-    }, [isRevealPhase, results, playerRole]);
+    }, [isRevealPhase, results, playerRole]); // Removed playSound/refs dependency
 
 
     useEffect(() => { setClueInput(''); setGameError(''); setSelectedVote(''); }, [gameState?.currentTurnNickname, gameState?.phase, gameState?.currentRound]);
@@ -49,10 +55,12 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
         e.preventDefault();
         const clue = clueInput.trim();
         setGameError('');
-        if (!canSubmitClue) { setGameError("Cannot submit clue now."); return; }
+        // Impostors can submit, removed role check here
+        if (!myTurn || !cluePhaseActive || alreadySubmittedThisRound) { setGameError("Cannot submit clue now."); return; }
         if (!clue) { setGameError("Please enter a clue."); return; }
         socket.emit('submit_clue', { roomCode, clue });
         // Play sound on successful submit attempt if sounds added back
+        // playSound(notificationAudioRef);
     };
 
     const handleVoteSubmit = (e) => {
@@ -63,6 +71,7 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
         if (!selectedVote) { setGameError("Please select a player to vote for."); return; }
         socket.emit('submit_vote', { roomCode, votedNickname: selectedVote });
         // Play sound on successful vote attempt if sounds added back
+        // playSound(notificationAudioRef);
     };
 
     // Helper to get simplified phase name for display
@@ -83,109 +92,51 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
             {/* <canvas id="confetti-canvas"></canvas> */}
             <h2>Impostor!</h2>
 
-            {/* --- Redesigned Game Status Display --- */}
+            {/* Game Status Display */}
             <div className="game-status-display">
-                <div className="status-item phase">
-                    <span className="status-label">Phase</span>
-                    <span className="status-value">{getSimplePhaseName()}</span>
-                </div>
-                {cluePhaseActive && currentRound > 0 && (
-                    <div className="status-item round">
-                        <span className="status-label">Round</span>
-                        <span className="status-value">{currentRound}/{IMPOSTOR_ROUNDS}</span>
-                    </div>
-                )}
-                {cluePhaseActive && gameState.currentTurnNickname && (
-                    <div className="status-item turn">
-                        <span className="status-label">Turn</span>
-                        <span className="status-value">{gameState.currentTurnNickname}</span>
-                    </div>
-                )}
-                 {isVotingPhase && (
-                    <div className="status-item votes-cast">
-                        <span className="status-label">Votes Cast</span>
-                        <span className="status-value">{gameState.votes ? Object.keys(gameState.votes).length : 0}/{users.length}</span>
-                    </div>
-                )}
+                <div className="status-item phase"><span className="status-label">Phase</span><span className="status-value">{getSimplePhaseName()}</span></div>
+                {cluePhaseActive && currentRound > 0 && (<div className="status-item round"><span className="status-label">Round</span><span className="status-value">{currentRound}/{IMPOSTOR_ROUNDS}</span></div>)}
+                {cluePhaseActive && gameState.currentTurnNickname && (<div className="status-item turn"><span className="status-label">Turn</span><span className="status-value">{gameState.currentTurnNickname}</span></div>)}
+                {isVotingPhase && (<div className="status-item votes-cast"><span className="status-label">Votes Cast</span><span className="status-value">{gameState.votes ? Object.keys(gameState.votes).length : 0}/{users.length}</span></div>)}
             </div>
-            {/* --- End Redesigned Status --- */}
 
-            {/* --- Display Category (Visible to All) --- */}
-            {gameState?.category && !isRevealPhase && ( // Show category during game, hide during reveal
-                 <p className="game-category-display">
-                     Category: <strong>{gameState.category}</strong>
-                 </p>
-            )}
-            {/* --- End Category Display --- */}
+            {/* Category Display */}
+            {gameState?.category && !isRevealPhase && ( <p className="game-category-display"> Category: <strong>{gameState.category}</strong> </p> )}
 
-
-            {/* --- Restructured Role Info Display --- */}
+            {/* Role Info Display */}
             <div className="role-info-box">
-                 {playerRole ? (
-                    playerRole.role === 'impostor' ? (
-                        // Impostor Display
-                        <div className="role-display role-impostor">
-                             <span className="role-name">Impostor</span>
-                        </div>
-                    ) : (
-                         // Innocent Display
-                        <div className="role-display role-innocent">
-                             <span className="role-name">Innocent</span>
-                             {/* Word on new line */}
-                             {playerRole.word && (
-                                 <p className="role-word">The word is: <strong className="highlight-word">{playerRole.word}</strong></p>
-                             )}
-                        </div>
-                    )
-                 ) : (
-                    <p className="assigning-role-text">Assigning roles...</p> // Placeholder
-                 )}
+                 {playerRole ? ( playerRole.role === 'impostor' ? (<div className="role-display role-impostor"><span className="role-name">Impostor</span></div>) : (<div className="role-display role-innocent"><span className="role-name">Innocent</span> {playerRole.word && (<p className="role-word">The word is: <strong className="highlight-word">{playerRole.word}</strong></p>)}</div>) ) : (<p className="assigning-role-text">Assigning roles...</p> )}
             </div>
-            {/* --- End Restructured Role Info --- */}
-
 
             {gameError && <p className="error">{gameError}</p>}
 
-            {/* --- Clue Submission UI --- */}
+            {/* Clue Submission UI */}
             {cluePhaseActive && (
                  <div className="clue-submission">
                     <h4>{myTurn ? "Your Turn!" : `Round ${currentRound} Clues`}</h4>
-                    {myTurn && !alreadySubmittedThisRound && (
-                        <form onSubmit={handleClueSubmit}>
-                            <input type="text" value={clueInput} onChange={(e) => setClueInput(e.target.value)} placeholder={"Enter your clue..."} disabled={!canSubmitClue} maxLength={50} />
-                            <button type="submit" disabled={!canSubmitClue}> Submit </button>
-                        </form>
-                    )}
+                    {myTurn && !alreadySubmittedThisRound && (<form onSubmit={handleClueSubmit}><input type="text" value={clueInput} onChange={(e)=>setClueInput(e.target.value)} placeholder={"Enter your clue..."} disabled={!canSubmitClue} maxLength={50} /><button type="submit" disabled={!canSubmitClue}> Submit </button></form>)}
                      {alreadySubmittedThisRound && <p className="info-text"><i>Your clue for Round {currentRound} submitted!</i></p>}
                      {!myTurn && cluePhaseActive && <p className="info-text"><i>Waiting for {gameState.currentTurnNickname}...</i></p>}
                 </div>
             )}
 
-            {/* --- Player List & Clues/Votes Display --- */}
+            {/* Player List & Clues/Votes Display */}
             <div className="player-status-list">
                 <h3>Players</h3>
                  <ul className="user-list">
                     {Array.isArray(users) && users.map((user) => {
                         const userClues = gameState?.clues?.[user.nickname] || [];
-                        // Use highlighting class instead of text indicator
                         const isTheirTurn = gameState?.currentTurnNickname === user.nickname && cluePhaseActive;
                         const hasVoted = !!gameState?.votes?.[user.nickname];
-                        const isImpostorRevealed = isRevealPhase && user.nickname === gameState.results?.impostorNickname;
+                        const isImpostorRevealed = isRevealPhase && results?.impostorNicknames?.includes(user.nickname);
                         const voteTarget = isRevealPhase ? gameState.votes?.[user.nickname] : null;
 
                         return (
-                            <li key={user.socketId || user.nickname}
-                                className={`
-                                    ${user.nickname === nickname ? 'current-player' : ''}
-                                    ${isTheirTurn ? 'active-turn' : ''} {/* Class applies highlight via CSS */}
-                                    ${hasVoted && isVotingPhase ? 'has-voted' : ''}
-                                `} >
+                            <li key={user.socketId || user.nickname} className={` ${user.nickname === nickname ? 'current-player' : ''} ${isTheirTurn ? 'active-turn' : ''} ${hasVoted && isVotingPhase ? 'has-voted' : ''} `} >
                                 <div className="player-name-area">
                                     {user.isAdmin && <span className="admin-badge" title="Room Admin">⭐ Admin</span>}
                                     <span>{user.nickname}</span>
-                                    {/* Fixed spacing for (You) */}
                                     {user.nickname === nickname && " (You)"}
-                                    {/* REMOVED Text Turn Indicator */}
                                     {isImpostorRevealed && (<span className="role-reveal highlight-impostor"> (IMPOSTOR!)</span>)}
                                 </div>
                                 <div className="player-status-details">
@@ -199,7 +150,7 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
                  </ul>
             </div>
 
-            {/* --- Voting UI --- */}
+            {/* Voting UI */}
             {isVotingPhase && !isRevealPhase && (
                 <div className="voting-area">
                     <h4>Vote for the Impostor!</h4>
@@ -210,34 +161,21 @@ function ImpostorGame({ socket, roomCode, nickname, isAdmin, users, gameState, p
                 </div>
             )}
 
-            {/* --- Reveal UI --- */}
+            {/* Reveal UI */}
             {isRevealPhase && results && (
                 <div className="reveal-area">
-                    {/* Big Win/Lose Message */}
-                    {didIWin !== null && ( // Check if win state is determined
-                        didIWin ? (
-                            <div className="win-lose-message winner-message">YOU WIN!</div>
-                        ) : (
-                            <div className="win-lose-message loser-message">YOU LOSE!</div>
-                        )
-                    )}
-
+                    {didIWin !== null && ( didIWin ? (<div className="win-lose-message winner-message">YOU WIN!</div>) : (<div className="win-lose-message loser-message">YOU LOSE!</div>) )}
                     <h4>Results</h4>
-                    <p>The Impostor was: <strong className="highlight-impostor">{results.impostorNickname}</strong></p>
+                    <p className="reveal-num-impostors">(This was a {results.impostorNicknames.length}-Impostor game!)</p>
+                    <p>The Impostor(s) were: <strong className="highlight-impostor">{results.impostorNicknames.join(' & ')}</strong></p>
                     {results.mostVotedNicknames.length > 0 ? ( <p>Most votes ({results.voteCounts[results.mostVotedNicknames[0]] || 0}) went to: <strong>{results.mostVotedNicknames.join(', ')}</strong></p> ) : ( <p>No votes were cast!</p> )}
-                    <p className={`winner-announcement ${results.winner}`}> {results.impostorWasCaught ? `The Impostor was caught! Players Win!` : `The Impostor escaped! Impostor Wins!`} </p>
+                    <p className={`winner-announcement ${results.winner}`}> {results.impostorWasCaught ? `An Impostor was caught! Players Win!` : `The Impostor(s) escaped! Impostor(s) Win!`} </p>
                 </div>
             )}
-            {/* --- End Reveal UI --- */}
 
-            {/* --- Action Buttons --- */}
+            {/* Action Buttons */}
             <div className="game-actions">
-                {isRevealPhase ? (
-                    <button className="back-to-lobby-btn" onClick={onReturnToLobby}> Back to Lobby </button>
-                ) : (
-                     // Always show leave button during game?
-                     <button className="leave-room-btn" onClick={onLeave}> Leave Game </button>
-                )}
+                {isRevealPhase ? ( <button className="back-to-lobby-btn" onClick={onReturnToLobby}> Back to Lobby </button> ) : ( <button className="leave-room-btn" onClick={onLeave}> Leave Game </button> )}
             </div>
         </div>
     );
