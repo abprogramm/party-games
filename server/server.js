@@ -2,7 +2,8 @@ const express = require('express');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const words = require('./words'); // Ensure words.js is in the SAME directory as server.js
+// Import the categories object instead of the flat list
+const categories = require('./words'); // Ensure words.js is in the SAME directory
 
 // --- Configuration ---
 const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
@@ -10,7 +11,7 @@ const PORT = process.env.PORT || 3001;
 const MIN_PLAYERS = 2;
 const MAX_PLAYERS = 12;
 const IMPOSTOR_ROUNDS = 3; // Number of clue rounds
-const COUNTDOWN_DURATION = 5000; // 5 seconds in milliseconds for countdown
+const COUNTDOWN_DURATION = 5000; // 5 seconds (This was added later, but including for context)
 // ---
 
 const app = express();
@@ -50,45 +51,82 @@ function calculateVoteResults(room) {
 }
 
 
-// --- Impostor Game Logic ---
+// --- Impostor Game Logic (UPDATED FOR CATEGORIES) ---
 function startImpostorGame(roomCode, room) {
     if (!room || room.users.length < MIN_PLAYERS) {
-        console.log(`[Room ${roomCode}] Cannot start impostor, invalid room or player count.`);
-        return; // Safety check
+        console.log(`[${roomCode}] Invalid start`);
+        // Optionally emit an error back to the admin who tried to start
+        const adminUser = room?.users.find(u => u.isAdmin);
+        if (adminUser) {
+            const adminSocket = io.sockets.sockets.get(adminUser.socketId);
+            adminSocket?.emit('error', { message: `Cannot start game, need at least ${MIN_PLAYERS} players.` });
+        }
+        return;
     }
 
     const players = room.users;
     const impostorIndex = Math.floor(Math.random() * players.length);
     const impostor = players[impostorIndex];
-    const word = words[Math.floor(Math.random() * words.length)];
-    const shuffledTurnOrder = shuffleArray(players.map(p => p.nickname));
-    const initialClues = {};
-    players.forEach(p => { initialClues[p.nickname] = []; });
 
+    // --- Select Category and Word ---
+    const categoryNames = Object.keys(categories);
+    if (categoryNames.length === 0) { console.error("Word categories are empty!"); return; }
+    const randomCategoryName = categoryNames[Math.floor(Math.random() * categoryNames.length)];
+    const wordsInCategory = categories[randomCategoryName];
+    if (!wordsInCategory || wordsInCategory.length === 0) { console.error(`Category "${randomCategoryName}" has no words!`); return; }
+    const word = wordsInCategory[Math.floor(Math.random() * wordsInCategory.length)];
+    // --- End Selection ---
+
+    // --- Turn order includes everyone now ---
+    const shuffledTurnOrder = shuffleArray(players.map(p => p.nickname));
+
+    // --- Initialize Clues Map ---
+    const initialClues = {};
+    players.forEach(p => { initialClues[p.nickname] = []; }); // Array to hold clues per round
+
+    // --- Update Game State with Category ---
     room.gameState = {
-        mode: 'impostor', word: word, impostorNickname: impostor.nickname,
-        clues: initialClues, votes: {}, results: null, phase: `clue_giving_round_1`,
-        currentRound: 1, turnOrder: shuffledTurnOrder, currentTurnIndex: 0,
+        mode: 'impostor',
+        // Removed word from global state
+        category: randomCategoryName, // Store the category name
+        impostorNickname: impostor.nickname,
+        clues: initialClues, // { nickname: [clueR1, clueR2, clueR3] }
+        votes: {}, // { voterNickname: votedNickname }
+        results: null, // To store vote results later
+        phase: `clue_giving_round_1`, // Start with round 1 phase
+        currentRound: 1,
+        turnOrder: shuffledTurnOrder,
+        currentTurnIndex: 0,
         currentTurnNickname: shuffledTurnOrder[0],
     };
-    console.log(`[Room ${roomCode}] Impostor Started. Word: ${word}, Impostor: ${impostor.nickname}, Round: 1, Turn: ${room.gameState.currentTurnNickname}`);
+    console.log(`[${roomCode}] Impostor Started. Category: ${randomCategoryName}, Impostor: ${impostor.nickname}, Round: 1, Turn: ${room.gameState.currentTurnNickname}`);
 
-    // Assign roles individually
+    // --- Assign roles individually (send category to all, word only to innocent) ---
     players.forEach(player => {
         const socket = io.sockets.sockets.get(player.socketId);
         if (socket) {
+            const isImpostor = player.socketId === impostor.socketId;
             socket.emit('game_role_assigned', {
-                role: player.socketId === impostor.socketId ? 'impostor' : 'normal',
-                word: player.socketId === impostor.socketId ? null : word,
-                message: player.socketId === impostor.socketId ? 'You are the Impostor! Submit clues to blend in.' : null
+                role: isImpostor ? 'impostor' : 'innocent', // Use innocent consistently
+                category: randomCategoryName,               // Send category to EVERYONE
+                word: isImpostor ? null : word,             // Send word ONLY to innocents
+                message: isImpostor ? 'You are the Impostor! Try to guess the word from the category and clues.' : null
             });
         }
     });
+    // --- End Role Assignment ---
 
-    // Notify all players with the initial game state AFTER roles are assigned
+    // Notify all players with the initial game state (including category)
+    // This happens slightly after role assignment
     io.to(roomCode).emit('game_state_update', {
-        ...room.gameState, word: null, // Don't broadcast word
+        mode: room.gameState.mode,
+        phase: room.gameState.phase,
+        category: room.gameState.category, // Send category
         players: room.users.map(u => ({nickname: u.nickname, isAdmin: u.isAdmin})),
+        currentTurnNickname: room.gameState.currentTurnNickname,
+        clues: room.gameState.clues,
+        currentRound: room.gameState.currentRound, // Send current round
+        // Do not send turnOrder or full clues map if not needed initially by all
     });
 }
 
@@ -117,8 +155,14 @@ io.on('connection', (socket) => {
     const newUser = { nickname, isAdmin: true, socketId: socket.id };
     activeRooms.set(roomCode, { admin: nickname, users: [newUser], gameState: null });
     socketIdToRoom.set(socket.id, roomCode);
-    socket.join(roomCode); console.log(`Room ${roomCode} created by ${nickname} (${socket.id})`);
-    socket.emit('room_created', { roomCode, users: activeRooms.get(roomCode).users, isAdmin: true });
+    socket.join(roomCode);
+    console.log(`Room ${roomCode} created by ${nickname} (${socket.id})`);
+    console.log(`[Server] Emitting 'room_created' to socket ${socket.id} for room ${roomCode}`); // Keep this log
+    socket.emit('room_created', {
+        roomCode,
+        users: activeRooms.get(roomCode).users,
+        isAdmin: true
+    });
   });
   socket.on('join_room', ({ roomCode, nickname }) => {
     if (!nickname || !roomCode) return socket.emit('error', { message: 'Nickname/Code required.' });
@@ -131,8 +175,7 @@ io.on('connection', (socket) => {
     console.log(`${nickname} (${socket.id}) joined room ${roomCode} (${room.users.length}/${MAX_PLAYERS})`);
     io.to(roomCode).emit('user_joined', { roomCode, nickname, users: room.users });
   });
-
-  // MODIFIED: start_game handler with countdown
+  // Includes countdown timeout
   socket.on('start_game', ({ roomCode, mode }) => {
     const room = activeRooms.get(roomCode); if (!room) return socket.emit('error', { message: 'Room not found.' });
     const reqUser = room.users.find(u=>u.socketId===socket.id); if (!reqUser || !reqUser.isAdmin) return socket.emit('error', { message: 'Only admin can start.' });
@@ -140,11 +183,9 @@ io.on('connection', (socket) => {
     if (!mode) return socket.emit('error', { message: `Mode must be selected.` });
     if (room.gameState) return socket.emit('error', { message: `Game already started.` });
 
-    // Notify clients game is *about* to start (triggers countdown)
     io.to(roomCode).emit('game_starting', { mode });
     console.log(`[Room ${roomCode}] Game starting sequence initiated for mode "${mode}". Countdown begins.`);
 
-    // Wait for countdown duration before actually starting game logic
     setTimeout(() => {
         const currentRoom = activeRooms.get(roomCode);
         if (!currentRoom) { console.log(`[Room ${roomCode}] Game start cancelled - room deleted during countdown.`); return; }
