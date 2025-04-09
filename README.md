@@ -20,7 +20,8 @@ Built with **React**, **Node.js**, and **Socket.IO**, this project allows player
 
 ## 📸 Screenshots
 
-*(Coming soon — consider adding GIFs or screenshots of gameplay!)*
+![image](https://github.com/user-attachments/assets/2001d80b-723b-41d7-a761-9da44bf797fc)
+
 
 ## 🧱 Project Structure
 
